@@ -13,6 +13,8 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SignupPatientRouteImport } from './routes/signup.patient'
 import { Route as SignupDoctorRouteImport } from './routes/signup.doctor'
+import { Route as DashboardPatientRouteImport } from './routes/dashboard.patient'
+import { Route as DashboardDoctorRouteImport } from './routes/dashboard.doctor'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -34,16 +36,30 @@ const SignupDoctorRoute = SignupDoctorRouteImport.update({
   path: '/signup/doctor',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardPatientRoute = DashboardPatientRouteImport.update({
+  id: '/dashboard/patient',
+  path: '/dashboard/patient',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardDoctorRoute = DashboardDoctorRouteImport.update({
+  id: '/dashboard/doctor',
+  path: '/dashboard/doctor',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/dashboard/doctor': typeof DashboardDoctorRoute
+  '/dashboard/patient': typeof DashboardPatientRoute
   '/signup/doctor': typeof SignupDoctorRoute
   '/signup/patient': typeof SignupPatientRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/dashboard/doctor': typeof DashboardDoctorRoute
+  '/dashboard/patient': typeof DashboardPatientRoute
   '/signup/doctor': typeof SignupDoctorRoute
   '/signup/patient': typeof SignupPatientRoute
 }
@@ -51,20 +67,43 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/dashboard/doctor': typeof DashboardDoctorRoute
+  '/dashboard/patient': typeof DashboardPatientRoute
   '/signup/doctor': typeof SignupDoctorRoute
   '/signup/patient': typeof SignupPatientRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/signup/doctor' | '/signup/patient'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/dashboard/doctor'
+    | '/dashboard/patient'
+    | '/signup/doctor'
+    | '/signup/patient'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/signup/doctor' | '/signup/patient'
-  id: '__root__' | '/' | '/login' | '/signup/doctor' | '/signup/patient'
+  to:
+    | '/'
+    | '/login'
+    | '/dashboard/doctor'
+    | '/dashboard/patient'
+    | '/signup/doctor'
+    | '/signup/patient'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/dashboard/doctor'
+    | '/dashboard/patient'
+    | '/signup/doctor'
+    | '/signup/patient'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
+  DashboardDoctorRoute: typeof DashboardDoctorRoute
+  DashboardPatientRoute: typeof DashboardPatientRoute
   SignupDoctorRoute: typeof SignupDoctorRoute
   SignupPatientRoute: typeof SignupPatientRoute
 }
@@ -99,12 +138,28 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupDoctorRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/patient': {
+      id: '/dashboard/patient'
+      path: '/dashboard/patient'
+      fullPath: '/dashboard/patient'
+      preLoaderRoute: typeof DashboardPatientRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard/doctor': {
+      id: '/dashboard/doctor'
+      path: '/dashboard/doctor'
+      fullPath: '/dashboard/doctor'
+      preLoaderRoute: typeof DashboardDoctorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
+  DashboardDoctorRoute: DashboardDoctorRoute,
+  DashboardPatientRoute: DashboardPatientRoute,
   SignupDoctorRoute: SignupDoctorRoute,
   SignupPatientRoute: SignupPatientRoute,
 }
