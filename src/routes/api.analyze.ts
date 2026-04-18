@@ -8,7 +8,20 @@ Severity guide (1-10):
 - 5-7: urgent (significant symptoms, no immediate danger)
 - 8-10: critical (chest pain, breathlessness, severe bleeding, stroke signs, syncope, anaphylaxis)
 
-Be conservative: when in doubt about red flags, score higher.`;
+Be conservative: when in doubt about red flags, score higher.
+
+Respond ONLY with a valid JSON object matching this schema exactly. DO NOT wrap with markdown blocks.
+{
+  "main_symptom": "One-line chief complaint",
+  "duration": "How long symptoms lasted",
+  "severity": number between 1-10,
+  "soap": {
+    "subjective": "string",
+    "objective": "string",
+    "assessment": "string",
+    "plan": "string"
+  }
+}`;
 
 const fallback = (transcript: string) => {
   const t = transcript.toLowerCase();
@@ -43,10 +56,10 @@ const fallback = (transcript: string) => {
     duration: "3 days",
     severity: 3,
     soap: {
-      subjective: "Patient reports nasal congestion, runny nose, and mild headache for 3 days.",
+      subjective: `Patient reports: "${transcript}".`,
       objective: "Awaiting examination.",
-      assessment: "Viral upper respiratory infection.",
-      plan: "Rest, fluids, paracetamol PRN, steam inhalation. Review if symptoms persist beyond 7 days.",
+      assessment: "Undifferentiated symptoms pending examination.",
+      plan: "Triage and routine evaluation.",
     },
   };
 };
@@ -62,84 +75,55 @@ export const Route = createFileRoute("/api/analyze")({
         } catch {
           return Response.json({ error: "Invalid JSON" }, { status: 400 });
         }
+        
         if (!transcript.trim()) {
           return Response.json({ error: "Empty transcript" }, { status: 400 });
         }
 
-        const apiKey = process.env.LOVABLE_API_KEY;
+        const apiKey = process.env.GROQ_API_KEY;
         if (!apiKey) {
-          return Response.json({ ...fallback(transcript), source: "fallback" });
+          console.log("No GROQ_API_KEY provided, returning fallback.");
+          return Response.json({ ...fallback(transcript), source: "local" });
         }
 
         try {
-          const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "Content-Type": "application/json",
+              "Authorization": `Bearer ${apiKey}`,
+              "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              model: "google/gemini-3-flash-preview",
+              model: "llama-3.3-70b-versatile",
               messages: [
                 { role: "system", content: SYSTEM },
-                { role: "user", content: `Patient transcript:\n"""${transcript}"""\n\nReturn a SOAP triage assessment.` },
+                { role: "user", content: `Patient transcript: """${transcript}"""` }
               ],
-              tools: [
-                {
-                  type: "function",
-                  function: {
-                    name: "record_triage",
-                    description: "Record extracted symptom data and SOAP note.",
-                    parameters: {
-                      type: "object",
-                      properties: {
-                        main_symptom: { type: "string", description: "One-line chief complaint." },
-                        duration: { type: "string", description: "How long symptoms have lasted." },
-                        severity: { type: "number", minimum: 1, maximum: 10 },
-                        soap: {
-                          type: "object",
-                          properties: {
-                            subjective: { type: "string" },
-                            objective: { type: "string" },
-                            assessment: { type: "string" },
-                            plan: { type: "string" },
-                          },
-                          required: ["subjective", "objective", "assessment", "plan"],
-                          additionalProperties: false,
-                        },
-                      },
-                      required: ["main_symptom", "duration", "severity", "soap"],
-                      additionalProperties: false,
-                    },
-                  },
-                },
-              ],
-              tool_choice: { type: "function", function: { name: "record_triage" } },
-            }),
+              response_format: { type: "json_object" },
+              temperature: 0.2
+            })
           });
 
-          if (resp.status === 429) {
-            return Response.json({ error: "Rate limited. Please wait a moment." }, { status: 429 });
-          }
-          if (resp.status === 402) {
-            return Response.json({ error: "AI credits exhausted. Add credits in Lovable workspace." }, { status: 402 });
-          }
-          if (!resp.ok) {
-            console.error("AI gateway error", resp.status, await resp.text());
-            return Response.json({ ...fallback(transcript), source: "fallback" });
+          if (!response.ok) {
+             console.error("Groq API error", response.status, await response.text());
+             return Response.json({ ...fallback(transcript), source: "local" });
           }
 
-          const data = await resp.json();
-          const call = data.choices?.[0]?.message?.tool_calls?.[0];
-          const args = call?.function?.arguments;
-          if (!args) {
-            return Response.json({ ...fallback(transcript), source: "fallback" });
+          const result = await response.json();
+          const responseText = result.choices[0]?.message?.content || "{}";
+          
+          let parsed;
+          try {
+            parsed = JSON.parse(responseText);
+          } catch (parseError) {
+            console.error("Failed to parse Groq output:", responseText);
+             return Response.json({ ...fallback(transcript), source: "local" });
           }
-          const parsed = typeof args === "string" ? JSON.parse(args) : args;
+
           return Response.json({ ...parsed, source: "ai" });
-        } catch (e) {
-          console.error("analyze error", e);
-          return Response.json({ ...fallback(transcript), source: "fallback" });
+        } catch (e: any) {
+          console.error("Groq analyze error:", e?.message || e);
+          return Response.json({ ...fallback(transcript), source: "local" });
         }
       },
     },

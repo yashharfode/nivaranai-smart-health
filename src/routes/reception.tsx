@@ -19,6 +19,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { db } from "@/lib/firebase";
+import { collection, addDoc } from "firebase/firestore";
 import {
   type PatientRecord,
   type Priority,
@@ -31,14 +33,14 @@ import {
 } from "@/lib/triage";
 import { isVoiceSupported, startVoice, type VoiceLang, type VoiceSession } from "@/lib/voice";
 
-export const Route = createFileRoute("/demo")({
+export const Route = createFileRoute("/reception")({
   head: () => ({
     meta: [
-      { title: "Live demo — NivaranAI" },
+      { title: "Patient Reception — NivaranAI" },
       {
         name: "description",
         content:
-          "Speak symptoms, get an AI-drafted SOAP note, and watch patients sort by priority in real time.",
+          "Speak symptoms to register and get an AI-drafted SOAP note generated instantly.",
       },
     ],
   }),
@@ -76,7 +78,7 @@ function DemoPage() {
   };
 
   const onClear = () => {
-    if (!confirm("Clear all patients from this demo?")) return;
+    if (!confirm("Clear all patients from this station?")) return;
     setPatients([]);
     setSelectedId(null);
     if (typeof window !== "undefined") window.localStorage.removeItem(PATIENTS_KEY);
@@ -103,16 +105,10 @@ function DemoPage() {
             <Logo className="h-8 w-8" />
             <span className="font-display text-lg font-semibold tracking-tight">NivaranAI</span>
             <span className="ml-2 hidden rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary sm:inline">
-              Live demo
+              Reception Desk
             </span>
           </Link>
           <div className="flex items-center gap-2">
-            <button
-              onClick={onClear}
-              className="hidden items-center gap-1.5 rounded-full border border-border bg-card/80 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:inline-flex"
-            >
-              <Trash2 className="h-3.5 w-3.5" /> Reset
-            </button>
             <Link
               to="/"
               className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/80 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-card"
@@ -153,6 +149,7 @@ function DemoPage() {
 function Kiosk({ onAdd }: { onAdd: (p: PatientRecord) => void }) {
   const [lang, setLang] = useState<VoiceLang>("en-IN");
   const [name, setName] = useState("");
+  const [age, setAge] = useState("");
   const [transcript, setTranscript] = useState("");
   const [interim, setInterim] = useState("");
   const [recording, setRecording] = useState(false);
@@ -198,6 +195,14 @@ function Kiosk({ onAdd }: { onAdd: (p: PatientRecord) => void }) {
       toast.error("Please describe symptoms first.");
       return;
     }
+    if (!name.trim()) {
+      toast.error("Please enter the patient's name.");
+      return;
+    }
+    if (!age.trim() || isNaN(Number(age))) {
+      toast.error("Please enter a valid age.");
+      return;
+    }
     setAnalyzing(true);
     try {
       const res = await fetch("/api/analyze", {
@@ -210,12 +215,17 @@ function Kiosk({ onAdd }: { onAdd: (p: PatientRecord) => void }) {
         toast.error(body.error || `Analyze failed (${res.status})`);
         return;
       }
-      const result = (await res.json()) as TriageResult;
+      const result = await res.json();
+      
+      const pName = name.trim();
+      const pAge = Number(age);
+      
+      // Update local state for demo view immediately
       const priority = getPriority(result.severity);
       const rec: PatientRecord = {
         ...result,
         id: `p-${Date.now()}`,
-        patient_name: name.trim() || `Patient ${Math.floor(Math.random() * 900) + 100}`,
+        patient_name: pName,
         transcript: final,
         priority,
         timestamp: Date.now(),
@@ -224,6 +234,37 @@ function Kiosk({ onAdd }: { onAdd: (p: PatientRecord) => void }) {
       setTranscript("");
       setInterim("");
       setName("");
+      setAge("");
+
+      // NATIVELY INSERT INTO FIREBASE FOR DOCTOR DASHBOARD LIVE UPDATE!
+      toast.promise(
+        async () => {
+          const priorityLevel = result.severity > 7 ? 'Urgent' : result.severity > 4 ? 'High' : 'Routine';
+          
+          await addDoc(collection(db, "consultations"), {
+            patient_name: pName,
+            patient_age: pAge,
+            complaint: result.main_symptom,
+            priority: priorityLevel,
+            status: "waiting",
+            wait_time: "Just now",
+            timestamp: Date.now(),
+            soap: {
+              subjective: result.soap?.subjective || 'None',
+              objective: result.soap?.objective || 'None',
+              assessment: result.soap?.assessment || 'None',
+              plan: result.soap?.plan || 'None',
+            },
+            is_ai_drafted: true
+          });
+        },
+        {
+          loading: 'Syncing to Doctor Dashboard...',
+          success: 'Added to live doctor queue!',
+          error: 'Could not sync to database.'
+        }
+      );
+
     } catch (e) {
       console.error(e);
       toast.error("Network error. Please try again.");
@@ -255,12 +296,21 @@ function Kiosk({ onAdd }: { onAdd: (p: PatientRecord) => void }) {
         </button>
       </div>
 
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Patient name (optional)"
-        className="mt-5 w-full rounded-2xl border border-input bg-background px-4 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-ring/30"
-      />
+      <div className="mt-5 grid grid-cols-2 gap-4">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Patient name *"
+          className="w-full rounded-2xl border border-input bg-background px-4 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-ring/30"
+        />
+        <input
+          value={age}
+          onChange={(e) => setAge(e.target.value)}
+          placeholder="Age (Years) *"
+          type="number"
+          className="w-full rounded-2xl border border-input bg-background px-4 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-ring/30"
+        />
+      </div>
 
       {/* Waveform */}
       <div className="mt-4 flex h-24 items-end justify-center gap-1 rounded-2xl bg-secondary/60 p-3">
@@ -479,7 +529,7 @@ function PatientCard({
           {patient.main_symptom} · {patient.duration}
         </p>
         <p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground/70">
-          {timeAgo(patient.timestamp)} {patient.source === "fallback" && "· demo"}
+          {timeAgo(patient.timestamp)}
         </p>
       </div>
     </motion.button>
@@ -545,7 +595,7 @@ function SoapPanel({ patient, onClose }: { patient: PatientRecord; onClose: () =
           Close
         </button>
         <button
-          onClick={() => toast.success("Approved & signed (demo)")}
+          onClick={() => toast.success("Approved & signed")}
           className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background hover:bg-mineral"
         >
           <CheckCircle2 className="h-4 w-4" /> Approve & sign
