@@ -23,6 +23,7 @@ import {
   type PatientRecord,
   type Priority,
   type TriageResult,
+  PATIENTS_KEY,
   getPriority,
   loadPatients,
   priorityMeta,
@@ -78,7 +79,7 @@ function DemoPage() {
     if (!confirm("Clear all patients from this demo?")) return;
     setPatients([]);
     setSelectedId(null);
-    if (typeof window !== "undefined") window.localStorage.removeItem("nivaranai.patients.v1");
+    if (typeof window !== "undefined") window.localStorage.removeItem(PATIENTS_KEY);
     toast("Cleared all patients.");
   };
 
